@@ -20,8 +20,8 @@ SonarQube relies on two main images:
 
 Run the following commands to pull these images:
 ```bash
-docker pull sonarqube:latest
-docker pull postgres:latest
+docker pull sonarqube:community
+docker pull postgres:15
 ```
 
 ---
@@ -30,48 +30,56 @@ docker pull postgres:latest
 
 Create a new file named `docker-compose.yml` and add the following content:
 ```yaml
+
 version: "3.8"
 
 services:
-  postgres:
-    image: postgres:latest
-    container_name: sonarqube-db
+  sonarqube:
+    image: sonarqube:community
+    container_name: sonarqube
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://db:5432/sonarqube
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true" # Disable ES bootstrap checks for containers
+      SONAR_SEARCH_JAVAOPTS: "-Xms512m -Xmx512m" # Adjust heap size for ES
+    depends_on:
+      - db
+    restart: always
+    volumes:
+      - ./sonarqube/data:/opt/sonarqube/data
+      - ./sonarqube/extensions:/opt/sonarqube/extensions
+      - ./sonarqube/logs:/opt/sonarqube/logs
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    deploy:
+      resources:
+        limits:
+          memory: 2g # Limit container memory usage to 2GB
+        reservations:
+          memory: 1g # Reserve at least 1GB for this container
+
+  db:
+    image: postgres:15
+    container_name: postgres
     environment:
       POSTGRES_USER: sonar
       POSTGRES_PASSWORD: sonar
       POSTGRES_DB: sonarqube
+    restart: always
     volumes:
-      - sonarqube_data:/var/lib/postgresql/data
-    networks:
-      - sonarqube-network
+      - ./postgres/data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 1g # Limit container memory usage to 1GB
+        reservations:
+          memory: 512m # Reserve at least 512MB for this container
 
-  sonarqube:
-    image: sonarqube:latest
-    container_name: sonarqube
-    depends_on:
-      - postgres
-    ports:
-      - "9000:9000"
-    environment:
-      SONAR_JDBC_URL: jdbc:postgresql://postgres:5432/sonarqube
-      SONAR_JDBC_USERNAME: sonar
-      SONAR_JDBC_PASSWORD: sonar
-    volumes:
-      - sonarqube_conf:/opt/sonarqube/conf
-      - sonarqube_data:/opt/sonarqube/data
-      - sonarqube_logs:/opt/sonarqube/logs
-      - sonarqube_extensions:/opt/sonarqube/extensions
-    networks:
-      - sonarqube-network
-
-volumes:
-  sonarqube_conf:
-  sonarqube_data:
-  sonarqube_logs:
-  sonarqube_extensions:
-
-networks:
-  sonarqube-network:
 ```
 
 ---
